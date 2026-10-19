@@ -1,0 +1,23 @@
+
+services:
+  db:
+    image: postgres:17
+    container_name: studypilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: studypilot_db
+      POSTGRES_USER: studypilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in root .env}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studypilot -d studypilot_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+
