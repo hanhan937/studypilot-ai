@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import StudyPlans from "./StudyPlans";
 
 // ---------- Configuration ----------
 // Uses the existing VITE_API_BASE_URL from frontend/.env (falls back to the local Django server).
@@ -264,7 +265,7 @@ export default function App() {
       )}
 
       {/* Body: task list (above the chat on small screens, sidebar on large screens) + chat */}
-      <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 px-4 py-4 lg:flex-row">
+      <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 lg:flex-row">
         {/* ----- Study Task List ----- */}
         <section
           aria-label="Study Task List"
@@ -311,6 +312,11 @@ export default function App() {
           </div>
         </section>
 
+        {/* ----- Study Plans ----- */}
+<section className="w-full shrink-0 lg:w-80">
+  <StudyPlans onTasksChanged={() => void loadTasks()} />
+</section>
+        
         {/* ----- Chat messages ----- */}
         <main className="min-h-0 flex-1 overflow-y-auto">
           <div className="flex flex-col gap-3">
