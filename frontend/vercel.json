@@ -1,0 +1,10 @@
+
+{
+    "rewrites": [
+      {
+        "source": "/api/:path*",
+        "destination": "https://studypilot-ai-ck6u.onrender.com/api/:path*"
+      }
+    ]
+  }
+  
