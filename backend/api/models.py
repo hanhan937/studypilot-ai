@@ -3,6 +3,14 @@ from django.db import models
 
 
 class StudyPlan(models.Model):
+    # Owner of this study plan (anonymous browser session)
+    session_key = models.CharField(
+        max_length=40,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
     goal = models.TextField()
     start_date = models.DateField()
     end_date = models.DateField()
@@ -14,6 +22,14 @@ class StudyPlan(models.Model):
 
 
 class Task(models.Model):
+    # Owner of this task (anonymous browser session)
+    session_key = models.CharField(
+        max_length=40,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
     plan = models.ForeignKey(
         StudyPlan,
         on_delete=models.SET_NULL,
@@ -26,11 +42,11 @@ class Task(models.Model):
     topic = models.CharField(max_length=100, blank=True)
     scheduled_date = models.DateField(
         null=True,
-        blank=True
+        blank=True,
     )
     estimated_minutes = models.PositiveIntegerField(
         null=True,
-        blank=True
+        blank=True,
     )
     completed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

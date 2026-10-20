@@ -1,21 +1,42 @@
 
-import asyncio
+"""
+StudyPilot AI REST API views.
+
+Endpoints:
+    GET  /api/health/
+    GET  /api/config/
+    GET  /api/csrf/
+    GET  /api/tasks/
+    GET  /api/plans/
+    POST /api/plans/generate/
+    POST /api/plans/<plan_id>/reschedule/
+
+Chat is handled separately in api/chat_view.py.
+"""
+
 import logging
-import os
 
-from agent.planning_service import generate_study_plan
-from agent.rescheduling_service import reschedule_study_plan
-from api.models import StudyPlan
+from django.conf import settings
+from django.middleware.csrf import get_token
 
-from agent import task_service
+from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework import status
 
-from agent.study_agent import generate_reply
+from agent import task_service
+from agent.planning_service import generate_study_plan
+from agent.rescheduling_service import reschedule_study_plan
+
+from api.models import StudyPlan
+
+from .csrf_protection import require_csrf
+from .guest_session import get_guest_session_key
+
 
 logger = logging.getLogger(__name__)
 
+
+# ---------- Health ----------
 
 @api_view(["GET"])
 def health(request):
@@ -25,58 +46,66 @@ def health(request):
     })
 
 
-@api_view(["POST"])
-def chat(request):
-    message = request.data.get("message")
+# ---------- Configuration ----------
 
-    if not isinstance(message, str) or not message.strip():
-        return Response(
-            {"error": "Please enter a valid message."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+@api_view(["GET"])
+def config(request):
+    return Response({
+        "mock_ai": settings.MOCK_AI,
+    })
 
-    if len(message) > 4000:
-        return Response(
-            {"error": "Message is too long."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
 
-    if not os.getenv("OPENAI_API_KEY"):
-        return Response(
-            {"error": "OpenAI API key is not configured."},
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-        )
+# ---------- CSRF Token ----------
 
-    try:
-        reply = asyncio.run(generate_reply(message.strip()))
-        return Response({"reply": reply})
+@api_view(["GET"])
+def csrf_token(request):
+    """Initialize the guest session and return a CSRF token."""
 
-    except Exception:
-        logger.exception("StudyPilot chat request failed")
-        return Response(
-            {"error": "AI service is currently unavailable."},
-            status=status.HTTP_502_BAD_GATEWAY,
-        )
-        
+    get_guest_session_key(request)
+
+    return Response({
+        "csrfToken": get_token(request),
+    })
+
+
+# ---------- Tasks ----------
 
 @api_view(["GET"])
 def tasks(request):
-    """Return all saved study tasks."""
-    results = task_service.list_tasks()
-    return Response({"tasks": results})
+    """Return tasks belonging to the current visitor."""
+
+    session_key = get_guest_session_key(request)
+
+    results = task_service.list_tasks(
+        session_key=session_key,
+    )
+
+    return Response({
+        "tasks": results,
+    })
 
 
+# ---------- Study Plan Generation ----------
 
+@require_csrf
 @api_view(["POST"])
 def generate_plan(request):
-    """Generate and save a study plan."""
+    """Generate a study plan for the current visitor."""
+
+    session_key = get_guest_session_key(request)
+
     try:
         result = generate_study_plan(
             goal=request.data.get("goal"),
             days=request.data.get("days"),
             daily_minutes=request.data.get("daily_minutes"),
+            session_key=session_key,
         )
-        return Response(result, status=status.HTTP_201_CREATED)
+
+        return Response(
+            result,
+            status=status.HTTP_201_CREATED,
+        )
 
     except ValueError as exc:
         return Response(
@@ -86,22 +115,38 @@ def generate_plan(request):
 
     except Exception:
         logger.exception("Failed to generate study plan")
+
         return Response(
             {"error": "Failed to generate study plan."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
+# ---------- Saved Study Plans ----------
+
 @api_view(["GET"])
 def plans(request):
-    """Return all study plans with their tasks."""
+    """Return only the current visitor's study plans and tasks."""
+
+    session_key = get_guest_session_key(request)
+
     results = []
 
-    for plan in StudyPlan.objects.prefetch_related("tasks").order_by(
-        "-created_at", "-id"
-    ):
+    owned_plans = (
+        StudyPlan.objects
+        .filter(session_key=session_key)
+        .prefetch_related("tasks")
+        .order_by("-created_at", "-id")
+    )
+
+    for plan in owned_plans:
+
         plan_tasks = sorted(
-            plan.tasks.all(),
+            (
+                task
+                for task in plan.tasks.all()
+                if task.session_key == session_key
+            ),
             key=lambda task: (
                 task.scheduled_date or plan.start_date,
                 task.id,
@@ -121,7 +166,8 @@ def plans(request):
                     "topic": task.topic,
                     "scheduled_date": (
                         task.scheduled_date.isoformat()
-                        if task.scheduled_date else None
+                        if task.scheduled_date
+                        else None
                     ),
                     "estimated_minutes": task.estimated_minutes,
                     "completed": task.completed,
@@ -130,14 +176,26 @@ def plans(request):
             ],
         })
 
-    return Response({"plans": results})
+    return Response({
+        "plans": results,
+    })
 
 
+# ---------- Adaptive Rescheduling ----------
+
+@require_csrf
 @api_view(["POST"])
 def reschedule_plan(request, plan_id):
-    """Reschedule overdue, unfinished study tasks."""
+    """Reschedule only a plan owned by the current visitor."""
+
+    session_key = get_guest_session_key(request)
+
     try:
-        result = reschedule_study_plan(plan_id)
+        result = reschedule_study_plan(
+            plan_id,
+            session_key=session_key,
+        )
+
         return Response(result)
 
     except StudyPlan.DoesNotExist:
@@ -154,9 +212,8 @@ def reschedule_plan(request, plan_id):
 
     except Exception:
         logger.exception("Failed to reschedule study plan")
+
         return Response(
             {"error": "Failed to reschedule study plan."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
-

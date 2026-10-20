@@ -1,8 +1,6 @@
 
 import { useEffect, useState, type FormEvent } from "react";
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+import { apiRequest } from "./api";
 
 type StudyTask = {
   id: number;
@@ -21,20 +19,6 @@ type StudyPlan = {
   tasks: StudyTask[];
 };
 
-async function apiRequest(
-  url: string,
-  options?: RequestInit
-) {
-  const response = await fetch(`${API_BASE_URL}${url}`, options);
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error ?? "Request failed.");
-  }
-
-  return data;
-}
-
 export default function StudyPlans({
   onTasksChanged,
 }: {
@@ -51,13 +35,17 @@ export default function StudyPlans({
 
   async function loadPlans() {
     setLoading(true);
+
     try {
       const data = await apiRequest("/api/plans/");
+
       setPlans(data.plans);
       setError("");
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to load plans."
+        err instanceof Error
+          ? err.message
+          : "Failed to load plans."
       );
     } finally {
       setLoading(false);
@@ -68,8 +56,11 @@ export default function StudyPlans({
     void loadPlans();
   }, []);
 
-  async function handleGenerate(event: FormEvent<HTMLFormElement>) {
+  async function handleGenerate(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
+
     if (busy) return;
 
     setBusy(true);
@@ -78,7 +69,9 @@ export default function StudyPlans({
     try {
       await apiRequest("/api/plans/generate/", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           goal,
           days,
@@ -91,7 +84,9 @@ export default function StudyPlans({
       onTasksChanged?.();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to generate plan."
+        err instanceof Error
+          ? err.message
+          : "Failed to generate plan."
       );
     } finally {
       setBusy(false);
@@ -105,15 +100,20 @@ export default function StudyPlans({
     setError("");
 
     try {
-      await apiRequest(`/api/plans/${planId}/reschedule/`, {
-        method: "POST",
-      });
+      await apiRequest(
+        `/api/plans/${planId}/reschedule/`,
+        {
+          method: "POST",
+        }
+      );
 
       await loadPlans();
       onTasksChanged?.();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to reschedule."
+        err instanceof Error
+          ? err.message
+          : "Failed to reschedule."
       );
     } finally {
       setBusy(false);
@@ -166,7 +166,9 @@ export default function StudyPlans({
               min={15}
               max={480}
               value={dailyMinutes}
-              onChange={(e) => setDailyMinutes(Number(e.target.value))}
+              onChange={(e) =>
+                setDailyMinutes(Number(e.target.value))
+              }
               required
               className="mt-1 w-full rounded-lg border border-slate-300 p-2"
             />
@@ -183,7 +185,10 @@ export default function StudyPlans({
       </form>
 
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+        <p
+          role="alert"
+          className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
+        >
           {error}
         </p>
       )}
@@ -191,6 +196,7 @@ export default function StudyPlans({
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold">Saved Plans</h3>
+
           <button
             onClick={() => void loadPlans()}
             disabled={loading || busy}
@@ -200,10 +206,16 @@ export default function StudyPlans({
           </button>
         </div>
 
-        {loading && <p className="text-sm text-slate-500">Loading...</p>}
+        {loading && (
+          <p className="text-sm text-slate-500">
+            Loading...
+          </p>
+        )}
 
         {!loading && plans.length === 0 && (
-          <p className="text-sm text-slate-500">No study plans yet.</p>
+          <p className="text-sm text-slate-500">
+            No study plans yet.
+          </p>
         )}
 
         {plans.map((plan) => {
@@ -220,9 +232,11 @@ export default function StudyPlans({
                 <h4 className="font-semibold text-slate-900">
                   {plan.goal}
                 </h4>
+
                 <p className="text-xs text-slate-500">
                   {plan.start_date} to {plan.end_date}
                 </p>
+
                 <p className="text-xs text-slate-500">
                   {plan.daily_minutes} min/day ·{" "}
                   {completed}/{plan.tasks.length} completed
@@ -235,10 +249,17 @@ export default function StudyPlans({
                     key={task.id}
                     className="rounded-md bg-slate-50 p-2 text-sm"
                   >
-                    <span className={task.completed ? "line-through text-slate-400" : ""}>
+                    <span
+                      className={
+                        task.completed
+                          ? "line-through text-slate-400"
+                          : ""
+                      }
+                    >
                       {task.completed ? "✓ " : "○ "}
                       {task.title}
                     </span>
+
                     <p className="text-xs text-slate-500">
                       {task.scheduled_date ?? "Unscheduled"}
                       {" · "}
@@ -249,7 +270,9 @@ export default function StudyPlans({
               </ul>
 
               <button
-                onClick={() => void handleReschedule(plan.id)}
+                onClick={() =>
+                  void handleReschedule(plan.id)
+                }
                 disabled={busy}
                 className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
               >

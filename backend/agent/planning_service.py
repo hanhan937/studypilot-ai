@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from api.models import StudyPlan, Task
+from agent.task_service import validate_session_key
 
 
 # Demo Mode: fixed topics for coding interview preparation.
@@ -20,13 +21,29 @@ CODING_TOPICS = [
 ]
 
 
-def generate_study_plan(goal: str, days: int, daily_minutes: int) -> dict:
-    """Create a study plan and save its tasks to PostgreSQL."""
+def generate_study_plan(
+    goal: str,
+    days: int,
+    daily_minutes: int,
+    *,
+    session_key: str,
+) -> dict:
+    """Create a study plan belonging to one guest session."""
+
+    # Require a session identity for every new plan.
+    session_key = validate_session_key(session_key)
 
     if not isinstance(goal, str) or not goal.strip():
         raise ValueError("Goal cannot be empty.")
 
-    if not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 30:
+    if len(goal.strip()) > 500:
+        raise ValueError("Goal is too long.")
+
+    if (
+        not isinstance(days, int)
+        or isinstance(days, bool)
+        or not 1 <= days <= 30
+    ):
         raise ValueError("Days must be between 1 and 30.")
 
     if (
@@ -43,6 +60,7 @@ def generate_study_plan(goal: str, days: int, daily_minutes: int) -> dict:
     # Both the plan and its tasks are saved together.
     with transaction.atomic():
         plan = StudyPlan.objects.create(
+            session_key=session_key,
             goal=goal,
             start_date=start_date,
             end_date=end_date,
@@ -56,6 +74,7 @@ def generate_study_plan(goal: str, days: int, daily_minutes: int) -> dict:
             scheduled_date = start_date + timedelta(days=day)
 
             task = Task.objects.create(
+                session_key=session_key,
                 plan=plan,
                 title=f"Study {topic}",
                 topic=topic,
@@ -80,4 +99,3 @@ def generate_study_plan(goal: str, days: int, daily_minutes: int) -> dict:
         "daily_minutes": plan.daily_minutes,
         "tasks": tasks,
     }
-

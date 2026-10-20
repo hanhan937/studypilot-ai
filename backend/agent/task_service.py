@@ -1,8 +1,19 @@
 
-from django.core.exceptions import ValidationError
 from django.utils.dateparse import parse_date
 
 from api.models import Task
+
+
+def validate_session_key(session_key: str) -> str:
+    """Require a valid Django session key."""
+    if (
+        not isinstance(session_key, str)
+        or not session_key
+        or len(session_key) > 40
+    ):
+        raise ValueError("A valid session key is required.")
+
+    return session_key
 
 
 def create_task(
@@ -10,8 +21,15 @@ def create_task(
     topic: str = "",
     scheduled_date: str | None = None,
     estimated_minutes: int | None = None,
+    *,
+    session_key: str,
 ) -> dict:
-    """Create and save a study task."""
+    """Create a task belonging to one guest session."""
+    session_key = validate_session_key(session_key)
+
+    if not isinstance(title, str):
+        raise ValueError("Task title must be a string.")
+
     title = title.strip()
 
     if not title:
@@ -30,11 +48,13 @@ def create_task(
         raise ValueError("Estimated minutes must be positive.")
 
     task = Task(
+        session_key=session_key,
         title=title,
         topic=topic,
         scheduled_date=date_value,
         estimated_minutes=estimated_minutes,
     )
+
     task.full_clean()
     task.save()
 
@@ -46,10 +66,14 @@ def create_task(
     }
 
 
-def list_tasks() -> list[dict]:
-    """Retrieve saved study tasks."""
+def list_tasks(*, session_key: str) -> list[dict]:
+    """Retrieve tasks for one guest session only."""
+    session_key = validate_session_key(session_key)
+
     return list(
-        Task.objects.order_by("-created_at", "-id").values(
+        Task.objects.filter(
+            session_key=session_key
+        ).order_by("-created_at", "-id").values(
             "id",
             "title",
             "topic",
@@ -60,10 +84,15 @@ def list_tasks() -> list[dict]:
     )
 
 
-def complete_task(task_id: int) -> dict:
-    """Mark a task as completed."""
+def complete_task(task_id: int, *, session_key: str) -> dict:
+    """Complete a task belonging to the current session."""
+    session_key = validate_session_key(session_key)
+
     try:
-        task = Task.objects.get(id=task_id)
+        task = Task.objects.get(
+            id=task_id,
+            session_key=session_key,
+        )
     except Task.DoesNotExist:
         raise ValueError("Task not found.")
 
@@ -78,10 +107,14 @@ def complete_task(task_id: int) -> dict:
     }
 
 
-def get_progress() -> dict:
-    """Calculate overall task completion progress."""
-    total = Task.objects.count()
-    completed = Task.objects.filter(completed=True).count()
+def get_progress(*, session_key: str) -> dict:
+    """Calculate progress for one guest session only."""
+    session_key = validate_session_key(session_key)
+
+    tasks = Task.objects.filter(session_key=session_key)
+
+    total = tasks.count()
+    completed = tasks.filter(completed=True).count()
 
     return {
         "total": total,
